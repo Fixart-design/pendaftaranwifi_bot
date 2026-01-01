@@ -65,69 +65,56 @@ async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo:
-        await update.message.reply_text("Mohon kirimkan gambar (foto).")
+        await update.message.reply_text("Mohon kirimkan gambar (foto) KTP.")
         return KTP
 
     photo_file = await update.message.photo[-1].get_file()
     in_p, out_p = "in.jpg", "out.jpg"
     await photo_file.download_to_drive(in_p)
 
-    # --- PROSES CROP YANG LEBIH KUAT ---
+    # --- PROSES CROP ---
     img = cv2.imread(in_p)
     if img is not None:
-        # 1. Perkecil sedikit untuk mempercepat proses tapi tetap detail
         original = img.copy()
-        
-        # 2. Ubah ke Abu-abu & Blur untuk hilangkan noise
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         blur = cv2.medianBlur(gray, 5)
-
-        # 3. Adaptive Threshold (Menyesuaikan dengan cahaya foto)
         thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-
-        # 4. Cari Kontur
         cnts, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         
-        # Ambil kontur yang luasnya masuk akal untuk ukuran KTP
-        # Filter: Kontur harus besar tapi tidak sebesar seluruh layar
         valid_cnts = [c for c in cnts if cv2.contourArea(c) > (img.shape[0] * img.shape[1] * 0.1)]
         
         if valid_cnts:
-            # Ambil yang paling mendekati bentuk kotak
             best_cnt = max(valid_cnts, key=cv2.contourArea)
             x, y, w, h = cv2.boundingRect(best_cnt)
-            
-            # Tambahkan sedikit ruang (padding) 5% agar tidak terpotong pas di garis
-            pad_w = int(w * 0.05)
-            pad_h = int(h * 0.05)
-            
-            y1 = max(0, y - pad_h)
-            y2 = min(img.shape[0], y + h + pad_h)
-            x1 = max(0, x - pad_w)
-            x2 = min(img.shape[1], x + w + pad_w)
-
-            cropped = original[y1:y2, x1:x2]
-            cv2.imwrite(out_p, cropped)
+            # Padding 5%
+            y1, y2 = max(0, y-int(h*0.05)), min(img.shape[0], y+h+int(h*0.05))
+            x1, x2 = max(0, x-int(w*0.05)), min(img.shape[1], x+w+int(w*0.05))
+            cv2.imwrite(out_p, original[y1:y2, x1:x2])
             final_img = out_p
         else:
-            # Jika tidak yakin, kirim foto asli daripada salah potong
             final_img = in_p
     else:
         final_img = in_p
 
-    # --- FORMAT LAPORAN ---
+    # --- FORMAT LAPORAN (EMOJI TETAP + NAMA HURUF BESAR) ---
+    nama_user = str(context.user_data.get('nama', '-')).upper()
+    
     caption = (
-        f" **DATA PSB SPEEDHOME**\n\n"
+        f"**DATA PSB SPEEDHOME**\n\n"
         f"🌍 : {context.user_data.get('wilayah', '-')}\n"
-        f"👤 : {context.user_data.get('nama', '-')}\n"
+        f"👤 : **{nama_user}**\n"
         f"📱 : {context.user_data.get('hp', '-')}\n"
-        f"📶 : {context.user_data.get('paket', '-')}\n"
+        f"📶 : **{context.user_data.get('paket', '-')}**\n"
         f"👷 : {context.user_data.get('sales', '-')}\n\n"
         f"📍 : {context.user_data.get('tikor', '-')}\n"
         f"📝 : {context.user_data.get('note', '-')}"
     )
 
-    await update.message.reply_photo(photo=open(final_img, 'rb'), caption=caption, parse_mode='Markdown')
+    await update.message.reply_photo(
+        photo=open(final_img, 'rb'), 
+        caption=caption, 
+        parse_mode='Markdown'
+    )
     
     if os.path.exists(in_p): os.remove(in_p)
     if os.path.exists(out_p): os.remove(out_p)
