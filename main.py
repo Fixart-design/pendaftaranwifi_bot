@@ -100,11 +100,11 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nama_user = str(context.user_data.get('nama', '-')).upper()
     
     caption = (
-        f"<b>DATA PSB SPEEDHOME<b>\n\n"
+        f"<b>DATA PSB SPEEDHOME</b>\n\n"
         f"🌍 : {context.user_data.get('wilayah', '-')}\n"
-        f"👤 : <b>{nama_user}<b>\n"
+        f"👤 : <b>{nama_user}</b>\n"
         f"📱 : {context.user_data.get('hp', '-')}\n"
-        f"📶 : <b>{context.user_data.get('paket', '-')}<b>\n"
+        f"📶 : <b>{context.user_data.get('paket', '-')}</b>\n"
         f"👷 : {context.user_data.get('sales', '-')}\n\n"
         f"📍 : {context.user_data.get('tikor', '-')}\n"
         f"📝 : {context.user_data.get('note', '-')}"
