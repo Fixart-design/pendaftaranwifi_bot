@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
 # Mengambil data rahasia dari setting server
@@ -27,10 +27,11 @@ async def get_nama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return HP
 
 async def get_hp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Simpan nomor HP
     context.user_data['hp'] = update.message.text
     
-    # Daftar pilihan paket sesuai permintaan Anda
-    pilihan_paket = [
+    # Susun tombol paket
+    pilihan = [
         ['22 Mbps', '27 Mbps'],
         ['35 Mbps', '40 Mbps'],
         ['50 Mbps', '75 Mbps'],
@@ -39,8 +40,10 @@ async def get_hp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ['Corporate 50 Mbps', 'Corporate 60 Mbps']
     ]
     
-    markup = ReplyKeyboardMarkup(pilihan_paket, one_time_keyboard=True, resize_keyboard=True)
+    # Membuat keyboard
+    markup = ReplyKeyboardMarkup(pilihan, one_time_keyboard=True, resize_keyboard=True)
     
+    # Kirim pesan dengan tombol
     await update.message.reply_text(
         "Silakan pilih **Paket Kecepatan (Mbps)**:",
         reply_markup=markup,
