@@ -71,28 +71,44 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file = await update.message.photo[-1].get_file()
     in_p, out_p = "in.jpg", "out.jpg"
     await photo_file.download_to_drive(in_p)
-
-    # --- PROSES CROP ---
+    
+# --- LOGIKA CROPING VERSI BARU (LEBIH SENSITIF) ---
     img = cv2.imread(in_p)
     if img is not None:
-        original = img.copy()
+        # 1. Ubah ke abu-abu & beri sedikit blur
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        blur = cv2.medianBlur(gray, 5)
-        thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-        cnts, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        blur = cv2.GaussianBlur(gray, (7, 7), 0)
         
-        valid_cnts = [c for c in cnts if cv2.contourArea(c) > (img.shape[0] * img.shape[1] * 0.1)]
+        # 2. Deteksi tepi dengan Canny
+        edged = cv2.Canny(blur, 30, 150)
         
-        if valid_cnts:
-            best_cnt = max(valid_cnts, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(best_cnt)
-            # Padding 5%
-            y1, y2 = max(0, y-int(h*0.05)), min(img.shape[0], y+h+int(h*0.05))
-            x1, x2 = max(0, x-int(w*0.05)), min(img.shape[1], x+w+int(w*0.05))
-            cv2.imwrite(out_p, original[y1:y2, x1:x2])
-            final_img = out_p
+        # 3. Mempertebal garis tepi (Dilasi) agar kotak tersambung sempurna
+        kernel = np.ones((5,5), np.uint8)
+        dilated = cv2.dilate(edged, kernel, iterations=1)
+        
+        # 4. Cari kontur dari hasil penebalan tadi
+        cnts, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if cnts:
+            # Ambil kontur terbesar (asumsi itu adalah kartu KTP)
+            c = max(cnts, key=cv2.contourArea)
+            
+            # Cek luasnya: minimal 5% dari luas seluruh gambar agar tidak salah crop titik kecil
+            if cv2.contourArea(c) > (img.shape[0] * img.shape[1] * 0.05):
+                x, y, w, h = cv2.boundingRect(c)
+                
+                # Tambahkan sedikit margin agar tulisan KTP tidak mepet ke pinggir
+                margin = 15
+                y1, y2 = max(0, y-margin), min(img.shape[0], y+h+margin)
+                x1, x2 = max(0, x-margin), min(img.shape[1], x+w+margin)
+                
+                cropped = img[y1:y2, x1:x2]
+                cv2.imwrite(out_p, cropped)
+                final_img = out_p
+            else:
+                final_img = in_p # Luas terlalu kecil, pakai foto asli
         else:
-            final_img = in_p
+            final_img = in_p # Tidak ketemu garis kotak, pakai foto asli
     else:
         final_img = in_p
 
