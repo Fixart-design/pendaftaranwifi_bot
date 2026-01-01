@@ -17,17 +17,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Akses Ditolak!")
         return ConversationHandler.END
     
-    await update.message.reply_text("Halo! Mari buat pendaftaran baru.\nMasukkan **Alamat/Wilayah** (Contoh: Kalianda):")
+    await update.message.reply_text("Halo! Mari buat pendaftaran baru.\nMasukkan *Alamat/Wilayah* (Contoh: Kalianda):")
     return WILAYAH
 
 async def get_wilayah(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['wilayah'] = update.message.text
-    await update.message.reply_text("Masukkan **Nama Pelanggan**:")
+    await update.message.reply_text("Masukkan *Nama Pelanggan*:")
     return NAMA
 
 async def get_nama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['nama'] = update.message.text
-    await update.message.reply_text("Masukkan **Nomor HP/WA**:")
+    await update.message.reply_text("Masukkan *Nomor HP/WA*:")
     return HP
 
 async def get_hp(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -40,27 +40,27 @@ async def get_hp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = ReplyKeyboardMarkup(pilihan, one_time_keyboard=True, resize_keyboard=True)
     
-    await update.message.reply_text("Pilih **Paket Kecepatan**:", reply_markup=markup)
+    await update.message.reply_text("Pilih *Paket Kecepatan*:", reply_markup=markup)
     return PAKET
 
 async def get_paket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['paket'] = update.message.text
-    await update.message.reply_text("Masukkan **Nama Sales**:", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("Masukkan *Nama Sales*:", reply_markup=ReplyKeyboardRemove())
     return SALES
 
 async def get_sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['sales'] = update.message.text
-    await update.message.reply_text("Masukkan **Titik Koordinat (Tikor)**:")
+    await update.message.reply_text("Masukkan *Titik Koordinat (Tikor)*:")
     return TIKOR
 
 async def get_tikor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['tikor'] = update.message.text
-    await update.message.reply_text("Masukkan **Catatan (Note)**:")
+    await update.message.reply_text("Masukkan *Catatan (Note)*:")
     return NOTE
 
 async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['note'] = update.message.text
-    await update.message.reply_text("Terakhir, kirim **Foto KTP**:")
+    await update.message.reply_text("Terakhir, kirim *Foto KTP*:")
     return KTP
 
 async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
