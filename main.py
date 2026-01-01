@@ -28,12 +28,36 @@ async def get_nama(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_hp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['hp'] = update.message.text
-    await update.message.reply_text("Pilih Paket (contoh: 12 Mbps):")
+    
+    # Daftar pilihan paket sesuai permintaan Anda
+    pilihan_paket = [
+        ['22 Mbps', '27 Mbps'],
+        ['35 Mbps', '40 Mbps'],
+        ['50 Mbps', '75 Mbps'],
+        ['Corporate 15 Mbps', 'Corporate 20 Mbps'],
+        ['Corporate 25 Mbps', 'Corporate 30 Mbps'],
+        ['Corporate 50 Mbps', 'Corporate 60 Mbps']
+    ]
+    
+    markup = ReplyKeyboardMarkup(pilihan_paket, one_time_keyboard=True, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "Silakan pilih **Paket Kecepatan (Mbps)**:",
+        reply_markup=markup,
+        parse_mode='Markdown'
+    )
     return PAKET
 
 async def get_paket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Menyimpan pilihan yang diklik user
     context.user_data['paket'] = update.message.text
-    await update.message.reply_text("Nama Sales:")
+    
+    # Menghapus keyboard tombol dan lanjut ke pertanyaan Nama Sales
+    await update.message.reply_text(
+        f"✅ Paket **{update.message.text}** dipilih.\n\nMasukkan **Nama Sales**:",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode='Markdown'
+    )
     return SALES
 
 async def get_sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
