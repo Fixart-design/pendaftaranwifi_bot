@@ -12,7 +12,6 @@ ALLOWED_USERS = [int(i) for i in raw_users.split(',') if i]
 # Definisi Urutan Pertanyaan (States)
 WILAYAH, NAMA, HP, PAKET, SALES, TIKOR, NOTE, KTP = range(8)
 
-# --- FUNGSI PEMBANTU ---
 async def save_and_reply(update, context, text, reply_markup=None):
     if 'msg_to_delete' not in context.user_data:
         context.user_data['msg_to_delete'] = []
@@ -22,11 +21,11 @@ async def save_and_reply(update, context, text, reply_markup=None):
     context.user_data['msg_to_delete'].append(sent_msg.message_id)
     return sent_msg
 
-# --- TAHAPAN CONVERSATION ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ALLOWED_USERS:
         await update.message.reply_text("❌ Akses Ditolak!")
         return ConversationHandler.END
+    context.user_data.clear() # Bersihkan semua data lama
     context.user_data['msg_to_delete'] = []
     context.user_data['force_no_crop'] = False
     await save_and_reply(update, context, "Halo! Mari buat pendaftaran baru.\nMasukkan *Alamat/Wilayah*:")
@@ -74,6 +73,7 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Mohon kirimkan gambar (foto) KTP.")
         return KTP
 
+    # Catat pesan KTP user
     if 'msg_to_delete' in context.user_data:
         context.user_data['msg_to_delete'].append(update.message.message_id)
 
@@ -82,7 +82,7 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(in_p)
     final_img = in_p
 
-    # LOGIKA CROP (Hanya jika tidak dipaksa Manual)
+    # LOGIKA CROP OTOMATIS
     if not context.user_data.get('force_no_crop', False):
         img = cv2.imread(in_p)
         if img is not None:
@@ -125,32 +125,36 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['msg_to_delete'] = []
 
     # Tombol Upload Ulang
-    keyboard = [[InlineKeyboardButton("🔄 Upload Ulang (Manual)", callback_data='ulang_manual')]]
+    kb = [[InlineKeyboardButton("🔄 Upload Ulang (Manual)", callback_data='ulang_manual')]]
+    
     await update.message.reply_photo(
         photo=open(final_img, 'rb'), 
         caption=caption, 
         parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(kb)
     )
     
-    # Hapus file lokal
     if os.path.exists(in_p): os.remove(in_p)
     if os.path.exists(out_p): os.remove(out_p)
     
-    # Reset flag force_no_crop untuk pendaftaran berikutnya
-    context.user_data['force_no_crop'] = False
+    # JANGAN kembalikan END jika ingin tombol tetap aktif di dalam conv
+    # Tapi karena kita ingin tombol Global, kita biarkan END dan pakai handler luar
     return ConversationHandler.END
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    # Hapus loading "memuat..." di Telegram
+    await query.answer()
+    
     if query.data == 'ulang_manual':
-        await query.answer("Mode Manual Aktif")
         context.user_data['force_no_crop'] = True
         await query.message.delete()
         
         msg = await query.message.reply_text("Silakan kirimkan *Foto KTP hasil crop manual* Anda:")
         context.user_data['msg_to_delete'] = [msg.message_id]
-        return KTP # Mengarahkan bot kembali menunggu foto di state KTP
+        
+        # Kembalikan ke state KTP secara paksa
+        return KTP
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -165,16 +169,21 @@ def main():
             SALES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_sales)],
             TIKOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_tikor)],
             NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_note)],
-            KTP: [MessageHandler(filters.PHOTO, get_ktp)]
+            KTP: [MessageHandler(filters.PHOTO, get_ktp)],
         },
         fallbacks=[
             CommandHandler('start', start),
+            # Masukkan handler tombol di sini agar bisa menangkap sinyal saat state aktif
             CallbackQueryHandler(button_handler, pattern='^ulang_manual$')
         ],
+        # Sangat penting agar alur tidak terputus total
         allow_reentry=True
     )
     
     app.add_handler(conv)
+    # Tambahkan handler tombol secara global juga sebagai cadangan
+    app.add_handler(CallbackQueryHandler(button_handler, pattern='^ulang_manual$'))
+    
     app.run_polling()
 
 if __name__ == '__main__':
