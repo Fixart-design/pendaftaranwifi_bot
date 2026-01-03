@@ -18,7 +18,7 @@ async def save_and_reply(update, context, text, reply_markup=None):
         context.user_data['msg_to_delete'] = []
     if update.message:
         context.user_data['msg_to_delete'].append(update.message.message_id)
-    sent_msg = await update.message.reply_text(text, reply_markup=reply_markup)
+    sent_msg = await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     context.user_data['msg_to_delete'].append(sent_msg.message_id)
     return sent_msg
 
@@ -80,33 +80,23 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file = await update.message.photo[-1].get_file()
     in_p, out_p = "in.jpg", "out.jpg"
     await photo_file.download_to_drive(in_p)
-    
     final_img = in_p
 
-    # LOGIKA CROP (Hanya jika bukan upload ulang manual)
+    # LOGIKA CROP (Hanya jika tidak dipaksa Manual)
     if not context.user_data.get('force_no_crop', False):
         img = cv2.imread(in_p)
         if img is not None:
-            # 1. Coba Biru
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-            lower_blue = np.array([90, 50, 50])
-            upper_blue = np.array([130, 255, 255])
-            mask = cv2.inRange(hsv, lower_blue, upper_blue)
+            mask = cv2.inRange(hsv, np.array([90, 50, 50]), np.array([130, 255, 255]))
             cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            target = max(cnts, key=cv2.contourArea) if cnts else None
             
-            target = None
-            if cnts:
-                target = max(cnts, key=cv2.contourArea)
-                if cv2.contourArea(target) < (img.shape[0] * img.shape[1] * 0.05): target = None
-            
-            # 2. Coba Kotak (Fotokopi)
-            if target is None:
+            if target is None or cv2.contourArea(target) < (img.shape[0]*img.shape[1]*0.05):
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 edged = cv2.Canny(cv2.GaussianBlur(gray, (7,7), 0), 30, 150)
                 dilated = cv2.dilate(edged, np.ones((5,5), np.uint8), iterations=1)
                 cnts_box, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                if cnts_box:
-                    target = max(cnts_box, key=cv2.contourArea)
+                target = max(cnts_box, key=cv2.contourArea) if cnts_box else None
 
             if target is not None and cv2.contourArea(target) > (img.shape[0]*img.shape[1]*0.05):
                 x, y, w, h = cv2.boundingRect(target)
@@ -128,40 +118,43 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📝 : {context.user_data.get('note', '-')}"
     )
 
-    # Bersihkan chat
+    # Bersihkan chat pendaftaran
     for msg_id in context.user_data.get('msg_to_delete', []):
         try: await context.bot.delete_message(update.effective_chat.id, msg_id)
         except: pass
     context.user_data['msg_to_delete'] = []
 
-    # Kirim hasil + tombol upload ulang
+    # Tombol Upload Ulang
     keyboard = [[InlineKeyboardButton("🔄 Upload Ulang (Manual)", callback_data='ulang_manual')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_photo(
         photo=open(final_img, 'rb'), 
         caption=caption, 
         parse_mode='Markdown',
-        reply_markup=reply_markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
     
+    # Hapus file lokal
     if os.path.exists(in_p): os.remove(in_p)
     if os.path.exists(out_p): os.remove(out_p)
+    
+    # Reset flag force_no_crop untuk pendaftaran berikutnya
+    context.user_data['force_no_crop'] = False
     return ConversationHandler.END
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    
     if query.data == 'ulang_manual':
+        await query.answer("Mode Manual Aktif")
         context.user_data['force_no_crop'] = True
         await query.message.delete()
-        msg = await query.message.reply_text("Silakan kirimkan *Foto KTP editan manual* Anda.\n(Bot akan mengirimkannya apa adanya)")
+        
+        msg = await query.message.reply_text("Silakan kirimkan *Foto KTP hasil crop manual* Anda:")
         context.user_data['msg_to_delete'] = [msg.message_id]
-        return KTP
+        return KTP # Mengarahkan bot kembali menunggu foto di state KTP
 
 def main():
     app = Application.builder().token(TOKEN).build()
+    
     conv = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -172,13 +165,15 @@ def main():
             SALES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_sales)],
             TIKOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_tikor)],
             NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_note)],
-            KTP: [
-                MessageHandler(filters.PHOTO, get_ktp),
-                CallbackQueryHandler(button_handler, pattern='^ulang_manual$')
-            ],
+            KTP: [MessageHandler(filters.PHOTO, get_ktp)]
         },
-        fallbacks=[CommandHandler('start', start)],
+        fallbacks=[
+            CommandHandler('start', start),
+            CallbackQueryHandler(button_handler, pattern='^ulang_manual$')
+        ],
+        allow_reentry=True
     )
+    
     app.add_handler(conv)
     app.run_polling()
 
