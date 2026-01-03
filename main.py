@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 
 # Konfigurasi Token dan Akses
@@ -12,6 +12,14 @@ ALLOWED_USERS = [int(i) for i in raw_users.split(',') if i]
 # Definisi Urutan Pertanyaan (States)
 WILAYAH, NAMA, HP, PAKET, SALES, TIKOR, NOTE, KTP = range(8)
 
+# --- FUNGSI POST INIT (Untuk Set Tombol Menu) ---
+async def post_init(application: Application):
+    """Mengatur tombol menu di pojok kiri bawah layar"""
+    await application.bot.set_my_commands([
+        BotCommand("mulai", "🚀 Mulai Pendaftaran Baru")
+    ])
+
+# --- FUNGSI PEMBANTU ---
 async def save_and_reply(update, context, text, reply_markup=None):
     if 'msg_to_delete' not in context.user_data:
         context.user_data['msg_to_delete'] = []
@@ -21,6 +29,7 @@ async def save_and_reply(update, context, text, reply_markup=None):
     context.user_data['msg_to_delete'].append(sent_msg.message_id)
     return sent_msg
 
+# --- TAHAPAN CONVERSATION ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ALLOWED_USERS:
         await update.message.reply_text("❌ Akses Ditolak!")
@@ -73,15 +82,12 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Mohon kirimkan gambar (foto) KTP.")
         return KTP
 
-    # Simpan ID foto agar bisa dihapus jika user ingin ulang
     context.user_data['msg_to_delete'].append(update.message.message_id)
-
     photo_file = await update.message.photo[-1].get_file()
     in_p, out_p = "in.jpg", "out.jpg"
     await photo_file.download_to_drive(in_p)
     final_img = in_p
 
-    # LOGIKA CROP (Jika tidak dipaksa manual)
     if not context.user_data.get('force_no_crop', False):
         img = cv2.imread(in_p)
         if img is not None:
@@ -116,13 +122,11 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📝 : {context.user_data.get('note', '-')}"
     )
 
-    # Bersihkan chat pendaftaran
     for msg_id in context.user_data.get('msg_to_delete', []):
         try: await context.bot.delete_message(update.effective_chat.id, msg_id)
         except: pass
     context.user_data['msg_to_delete'] = []
 
-    # Tombol Akhir
     kb = [
         [InlineKeyboardButton("🔄 Upload Ulang (Manual)", callback_data='ulang_manual')],
         [InlineKeyboardButton("✅ Selesai & Kirim", callback_data='done')]
@@ -137,8 +141,6 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if os.path.exists(in_p): os.remove(in_p)
     if os.path.exists(out_p): os.remove(out_p)
-    
-    # TETAP STAY DI STATE KTP (Jangan END) agar bisa merespon tombol
     return KTP
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -150,19 +152,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.delete()
         msg = await query.message.reply_text("Silakan kirimkan *Foto KTP hasil crop manual* Anda:")
         context.user_data['msg_to_delete'] = [msg.message_id]
-        return KTP # Kembali menunggu foto
+        return KTP
     
     elif query.data == 'done':
-        # Hilangkan tombolnya saja, pendaftaran benar-benar selesai
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("✅ Laporan Berhasil Disimpan.")
         return ConversationHandler.END
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+    # Menambahkan post_init untuk set tombol menu secara otomatis
+    app = Application.builder().token(TOKEN).post_init(post_init).build()
     
     conv = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[
+            CommandHandler('start', start),
+            CommandHandler('mulai', start) # Perintah dari tombol menu
+        ],
         states={
             WILAYAH: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_wilayah)],
             NAMA: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_nama)],
@@ -173,10 +178,10 @@ def main():
             NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_note)],
             KTP: [
                 MessageHandler(filters.PHOTO, get_ktp),
-                CallbackQueryHandler(button_handler) # Pindah ke dalam state KTP
+                CallbackQueryHandler(button_handler)
             ],
         },
-        fallbacks=[CommandHandler('start', start)],
+        fallbacks=[CommandHandler('mulai', start)],
         allow_reentry=True
     )
     
