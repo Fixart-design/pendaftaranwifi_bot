@@ -128,7 +128,7 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['msg_to_delete'] = []
 
     kb = [
-        [InlineKeyboardButton("🔄 Upload Ulang (Manual)", callback_data='ulang_manual')],
+        [InlineKeyboardButton("🔄 Upload Ulang Foto KTP (crop Manual)", callback_data='ulang_manual')],
         [InlineKeyboardButton("✅ Selesai & Kirim", callback_data='done')]
     ]
     
