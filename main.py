@@ -150,7 +150,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == 'ulang_manual':
         context.user_data['force_no_crop'] = True
         await query.message.delete()
-        msg = await query.message.reply_text("Silakan kirimkan *Foto KTP hasil crop manual* Anda:")
+        msg = await query.message.reply_text("Silakan kirim ulang *Foto KTP yang sudah anda crop sendiri*")
         context.user_data['msg_to_delete'] = [msg.message_id]
         return KTP
     
