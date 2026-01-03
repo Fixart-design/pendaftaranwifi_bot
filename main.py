@@ -12,6 +12,7 @@ ALLOWED_USERS = [int(i) for i in raw_users.split(',') if i]
 # Definisi Urutan Pertanyaan (States)
 WILAYAH, NAMA, HP, PAKET, SALES, TIKOR, NOTE, KTP = range(8)
 
+# --- FUNGSI PEMBANTU ---
 async def save_and_reply(update, context, text, reply_markup=None):
     if 'msg_to_delete' not in context.user_data:
         context.user_data['msg_to_delete'] = []
@@ -21,12 +22,13 @@ async def save_and_reply(update, context, text, reply_markup=None):
     context.user_data['msg_to_delete'].append(sent_msg.message_id)
     return sent_msg
 
+# --- TAHAPAN CONVERSATION ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ALLOWED_USERS:
         await update.message.reply_text("❌ Akses Ditolak!")
         return ConversationHandler.END
     context.user_data['msg_to_delete'] = []
-    context.user_data['force_no_crop'] = False # Reset flag manual
+    context.user_data['force_no_crop'] = False
     await save_and_reply(update, context, "Halo! Mari buat pendaftaran baru.\nMasukkan *Alamat/Wilayah*:")
     return WILAYAH
 
@@ -80,12 +82,12 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(in_p)
     
     final_img = in_p
-    
-    # JALANKAN LOGIKA CROP HANYA JIKA BUKAN UPLOAD ULANG MANUAL
+
+    # LOGIKA CROP (Hanya jika bukan upload ulang manual)
     if not context.user_data.get('force_no_crop', False):
         img = cv2.imread(in_p)
         if img is not None:
-            # 1. Coba Deteksi Biru
+            # 1. Coba Biru
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             lower_blue = np.array([90, 50, 50])
             upper_blue = np.array([130, 255, 255])
@@ -97,7 +99,7 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 target = max(cnts, key=cv2.contourArea)
                 if cv2.contourArea(target) < (img.shape[0] * img.shape[1] * 0.05): target = None
             
-            # 2. Jika Biru Gagal, Coba Deteksi Kotak (Untuk Fotokopi)
+            # 2. Coba Kotak (Fotokopi)
             if target is None:
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 edged = cv2.Canny(cv2.GaussianBlur(gray, (7,7), 0), 30, 150)
@@ -105,8 +107,7 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cnts_box, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if cnts_box:
                     target = max(cnts_box, key=cv2.contourArea)
-            
-            # 3. Eksekusi Crop
+
             if target is not None and cv2.contourArea(target) > (img.shape[0]*img.shape[1]*0.05):
                 x, y, w, h = cv2.boundingRect(target)
                 margin = 20
@@ -133,7 +134,7 @@ async def get_ktp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
     context.user_data['msg_to_delete'] = []
 
-    # Tombol Pilihan
+    # Kirim hasil + tombol upload ulang
     keyboard = [[InlineKeyboardButton("🔄 Upload Ulang (Manual)", callback_data='ulang_manual')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -153,9 +154,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data == 'ulang_manual':
-        context.user_data['force_no_crop'] = True # Aktifkan bypass crop
+        context.user_data['force_no_crop'] = True
         await query.message.delete()
-        msg = await query.message.reply_text("Silakan kirimkan **Foto KTP yang sudah Anda potong manual**.\n(Bot tidak akan melakukan crop lagi)")
+        msg = await query.message.reply_text("Silakan kirimkan *Foto KTP editan manual* Anda.\n(Bot akan mengirimkannya apa adanya)")
         context.user_data['msg_to_delete'] = [msg.message_id]
         return KTP
 
@@ -171,13 +172,14 @@ def main():
             SALES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_sales)],
             TIKOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_tikor)],
             NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_note)],
-            KTP: [MessageHandler(filters.PHOTO, get_ktp)],
+            KTP: [
+                MessageHandler(filters.PHOTO, get_ktp),
+                CallbackQueryHandler(button_handler, pattern='^ulang_manual$')
+            ],
         },
         fallbacks=[CommandHandler('start', start)],
     )
-    # PENTING: Urutan handler
     app.add_handler(conv)
-    app.add_handler(CallbackQueryHandler(button_handler))
     app.run_polling()
 
 if __name__ == '__main__':
